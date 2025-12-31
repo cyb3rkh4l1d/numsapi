@@ -1,38 +1,27 @@
-const { PrismaClient } = require("@prisma/client");
-const { PrismaMariaDb } = require("@prisma/adapter-mariadb");
+const prisma = require("../lib/prisma");
 
-const bcryptLib = require("bcrypt");
+const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const { registerSchema, loginSchema } = require("../validation/userValidation");
 
-const prisma = new PrismaClient({
-  adapter: new PrismaMariaDb(process.env.DATABASE_URL),
-});
-
+// REGISTER USER
 exports.registerUser = async (req, res) => {
   try {
+    // Input validated by middleware
     const { fullName, dob, email, password } = req.body;
 
-    // 1. Validate input
-    if (!fullName || !dob || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    // 2. Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-    if (existingUser) {
+    // Check if email exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser)
       return res.status(409).json({ message: "Email already registered" });
-    }
 
-    // 3. Hash password
-    const hashedPassword = await bcryptLib.hash(password, 10);
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 4. Create user in DB
     const user = await prisma.user.create({
       data: {
         fullName,
-        dob: new Date(dob + "T00:00:00Z"), // ensure correct date parsing
+        dob: new Date(dob),
         email,
         password: hashedPassword,
         role: "user",
@@ -42,20 +31,42 @@ exports.registerUser = async (req, res) => {
         id: true,
         fullName: true,
         email: true,
+        dob: true,
         role: true,
         status: true,
         createdAt: true,
       },
     });
 
-    // 5. Return success
-    return res.status(201).json({
-      message: "User registered successfully",
-      user,
-    });
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userSafe = {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      dob: user.dob
+        ? {
+            iso: user.dob.toISOString(),
+            local: new Date(user.dob).toLocaleString(),
+            timezone: tz,
+          }
+        : null,
+      createdAt: user.createdAt
+        ? {
+            iso: user.createdAt.toISOString(),
+            local: new Date(user.createdAt).toLocaleString(),
+            timezone: tz,
+          }
+        : null,
+    };
+
+    res
+      .status(201)
+      .json({ message: "User registered successfully", user: userSafe });
   } catch (err) {
-    console.error("Register error:", err.message);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -64,53 +75,62 @@ exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Validate input
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
-    }
-
-    // 2. Find user by email
     const user = await prisma.user.findUnique({
       where: { email },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        password: true,
+        role: true,
+        status: true,
+        dob: true,
+        createdAt: true,
+      },
     });
 
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    // 3. Compare passwords
-    const isMatch = await bcryptLib.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ message: "Invalid credentials" });
 
-    // 4. Generate JWT
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || "1d",
+      }
     );
 
-    // 5. Return success with token
-    return res.status(200).json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-      },
-    });
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userSafe = {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      dob: user.dob
+        ? {
+            iso: user.dob.toISOString(),
+            local: new Date(user.dob).toLocaleString(),
+            timezone: tz,
+          }
+        : null,
+      createdAt: user.createdAt
+        ? {
+            iso: user.createdAt.toISOString(),
+            local: new Date(user.createdAt).toLocaleString(),
+            timezone: tz,
+          }
+        : null,
+    };
+
+    res.json({ message: "Login successful", token, user: userSafe });
   } catch (err) {
-    console.error("Login error:", err.message);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // GET USER BY ID (admin or user himself)
 exports.getUserById = async (req, res) => {
   try {
@@ -122,34 +142,65 @@ exports.getUserById = async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: parseInt(id) },
+      where: { id },
+
       select: {
         id: true,
         fullName: true,
         email: true,
         role: true,
         status: true,
+        dob: true,
         createdAt: true,
       },
     });
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.json(user);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userSafe = {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      dob: user.dob
+        ? {
+            iso: user.dob.toISOString(),
+            local: new Date(user.dob).toLocaleString(),
+            timezone: tz,
+          }
+        : null,
+      createdAt: user.createdAt
+        ? {
+            iso: user.createdAt.toISOString(),
+            local: new Date(user.createdAt).toLocaleString(),
+            timezone: tz,
+          }
+        : null,
+    };
+
+    res.json(userSafe);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// GET ALL USERS (admin only)
 exports.getAllUsers = async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Forbidden" });
-    }
+    // parse pagination params
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
+    // total users count
+    const totalUsers = await prisma.user.count();
+
+    // fetch users with pagination
     const users = await prisma.user.findMany({
+      skip: offset,
+      take: limit,
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         fullName: true,
@@ -160,24 +211,32 @@ exports.getAllUsers = async (req, res) => {
       },
     });
 
-    res.json(users);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(200).json({
+      success: true,
+      pagination: {
+        totalUsers,
+        limit,
+        offset,
+        returned: users.length,
+      },
+      users,
+    });
+  } catch (error) {
+    console.error("Get all users error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // BLOCK USER (admin or user himself)
 exports.blockUser = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params; // id is coerced to number by validateParams
 
     if (req.user.role !== "admin" && req.user.id != id) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
     const user = await prisma.user.update({
-      where: { id: parseInt(id) },
+      where: { id },
       data: { status: "inactive" },
       select: {
         id: true,
@@ -190,6 +249,10 @@ exports.blockUser = async (req, res) => {
 
     res.json({ message: "User blocked successfully", user });
   } catch (err) {
+    // handle record-not-found error from Prisma
+    if (err && err.code === "P2025") {
+      return res.status(404).json({ message: "User not found" });
+    }
     console.error(err);
     res.status(500).json({ message: "Internal server error" });
   }

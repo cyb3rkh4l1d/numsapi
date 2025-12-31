@@ -1,16 +1,29 @@
+// src/routes/userRoutes.js
 const express = require("express");
 const router = express.Router();
+const { registerUser, loginUser, getAllUsers, getUserById, blockUser } = require("../controllers/userController");
+const { authenticate, adminMiddleware } = require("../middlewares/auth");
+const validateParams = require("../middlewares/validateParams");
+const validateBody = require("../middlewares/validateBody");
+const {
+  blockUserParamsSchema,
+  registerSchema,
+  loginSchema,
+} = require("../validation/userValidation");
 
-const userController = require("../controllers/userController");
-const authenticate = require("../middlewares/auth");
+// Public routes
+router.post("/register", validateBody(registerSchema), registerUser);
+router.post("/login", validateBody(loginSchema), loginUser);
 
-// PUBLIC
-router.post("/register", userController.registerUser);
-router.post("/login", userController.loginUser);
-
-// PROTECTED
-router.get("/all", authenticate, userController.getAllUsers);
-router.put("/block/:id", authenticate, userController.blockUser);
-router.get("/:id", authenticate, userController.getUserById);
+// Protected routes
+router.get("/all", authenticate, adminMiddleware, getAllUsers);
+router.get("/:id", authenticate, validateParams(blockUserParamsSchema), getUserById);
+router.put(
+  "/block/:id",
+  authenticate,
+  adminMiddleware,
+  validateParams(blockUserParamsSchema),
+  blockUser
+);
 
 module.exports = router;

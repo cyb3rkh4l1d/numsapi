@@ -1,47 +1,37 @@
 const jwt = require("jsonwebtoken");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaMariaDb } = require("@prisma/adapter-mariadb");
-const prisma = new PrismaClient({
-  adapter: new PrismaMariaDb(process.env.DATABASE_URL),
-});
+const prisma = require("../lib/prisma");
 
-const authMiddleware = async (req, res, next) => {
-  const token = req.headers["authorization"]?.split(" ")[1];
-  if (!token)
-    return res.status(401).json({ error: "Access denied. No token provided." });
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
-    if (!user) return res.status(401).json({ error: "Invalid token." });
-    req.user = user;
-    next();
-  } catch (err) {
-    res.status(400).json({ error: "Invalid token." });
-  }
-};
 const authenticate = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Bearer <token>
+  const authHeader = req.headers.authorization;
 
-  if (!token) return res.status(401).json({ message: "No token provided" });
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ message: "Access denied. No token provided." });
+  }
+
+  const token = authHeader.split(" ")[1];
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { id, email, role }
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ message: "Invalid or expired token." });
   }
 };
 
+/**
+ * Middleware for admin-only routes
+ */
 const adminMiddleware = (req, res, next) => {
-  if (req.user.role !== "admin") {
-    return res.status(403).json({ error: "Admin access required." });
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required." });
   }
   next();
 };
 
-module.exports = authenticate;
-module.exports.authMiddleware = authMiddleware;
-module.exports.adminMiddleware = adminMiddleware;
+module.exports = {
+  authenticate,
+  adminMiddleware,
+};
