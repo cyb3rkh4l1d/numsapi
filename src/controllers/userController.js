@@ -110,3 +110,87 @@ exports.loginUser = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// GET USER BY ID (admin or user himself)
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Only admin or user himself
+    if (req.user.role !== "admin" && req.user.id != id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(id) },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// GET ALL USERS (admin only)
+exports.getAllUsers = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// BLOCK USER (admin or user himself)
+exports.blockUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.role !== "admin" && req.user.id != id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: { status: "inactive" },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true,
+      },
+    });
+
+    res.json({ message: "User blocked successfully", user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

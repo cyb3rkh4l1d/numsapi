@@ -1,39 +1,46 @@
+require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
+const { PrismaMariaDb } = require("@prisma/adapter-mariadb");
 const bcrypt = require("bcrypt");
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaMariaDb(process.env.DATABASE_URL),
+});
 
 async function main() {
-  const adminEmail = "admin@example.com";
+  const email = "admin@example.com";
+  const password = "Admin@123"; // change if you like
 
   // Check if admin already exists
-  const adminExists = await prisma.user.findUnique({
-    where: { email: adminEmail },
-  });
-
-  if (adminExists) {
-    console.log("Admin already exists");
+  const existingAdmin = await prisma.user.findUnique({ where: { email } });
+  if (existingAdmin) {
+    console.log("Admin already exists:", email);
     return;
   }
 
-  const hashedPassword = await bcrypt.hash("admin123", 10);
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-  await prisma.user.create({
+  // Create admin user
+  const admin = await prisma.user.create({
     data: {
-      fullName: "System Admin",
+      fullName: "Admin User",
       dob: new Date("1990-01-01"),
-      email: adminEmail,
+      email,
       password: hashedPassword,
       role: "admin",
       status: "active",
     },
   });
 
-  console.log("Admin user created successfully");
+  console.log("Admin user created:", admin);
 }
 
 main()
-  .catch(console.error)
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
   .finally(async () => {
     await prisma.$disconnect();
   });
