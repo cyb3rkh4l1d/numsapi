@@ -2,7 +2,15 @@ require('dotenv').config();
 const express = require('express');
 const app = express();
 
+const { httpLogger } = require('./lib/logger');
+
+// Request logging + request-id header
+app.use(httpLogger);
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.id) res.setHeader('X-Request-Id', req.id);
+  next();
+});
 
 // Routes
 const userRoutes = require('./routes/userRoutes');

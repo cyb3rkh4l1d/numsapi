@@ -24,12 +24,6 @@ router.post('/login', validateBody(loginSchema), loginUser);
 // Protected routes
 router.get('/all', authenticate, adminMiddleware, getAllUsers);
 router.get('/:id', authenticate, validateParams(userIdParamSchema), getUserById);
-router.put(
-  '/block/:id',
-  authenticate,
-  adminMiddleware,
-  validateParams(userIdParamSchema),
-  blockUser,
-);
+router.put('/block/:id', authenticate, validateParams(userIdParamSchema), blockUser);
 
 module.exports = router;

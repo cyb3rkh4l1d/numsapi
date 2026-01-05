@@ -1,8 +1,8 @@
-const prisma = require("../lib/prisma");
+const prisma = require('../lib/prisma');
+const { logger } = require('../lib/logger');
 
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const { registerSchema, loginSchema } = require("../validation/userValidation");
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 // REGISTER USER
 exports.registerUser = async (req, res) => {
@@ -12,8 +12,7 @@ exports.registerUser = async (req, res) => {
 
     // Check if email exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser)
-      return res.status(409).json({ message: "Email already registered" });
+    if (existingUser) return res.status(409).json({ message: 'Email already registered' });
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -24,8 +23,8 @@ exports.registerUser = async (req, res) => {
         dob: new Date(dob),
         email,
         password: hashedPassword,
-        role: "user",
-        status: "active",
+        role: 'user',
+        status: 'active',
       },
       select: {
         id: true,
@@ -61,12 +60,11 @@ exports.registerUser = async (req, res) => {
         : null,
     };
 
-    res
-      .status(201)
-      .json({ message: "User registered successfully", user: userSafe });
+    res.status(201).json({ message: 'User registered successfully', user: userSafe });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    if (req && req.log) req.log.error({ err }, 'registerUser failed');
+    else logger.error({ err }, 'registerUser failed');
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -89,17 +87,17 @@ exports.loginUser = async (req, res) => {
       },
     });
 
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: "Invalid credentials" });
+    if (!match) return res.status(401).json({ message: 'Invalid credentials' });
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       {
-        expiresIn: process.env.JWT_EXPIRES_IN || "1d",
-      }
+        expiresIn: process.env.JWT_EXPIRES_IN || '1d',
+      },
     );
 
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -125,10 +123,11 @@ exports.loginUser = async (req, res) => {
         : null,
     };
 
-    res.json({ message: "Login successful", token, user: userSafe });
+    res.json({ message: 'Login successful', token, user: userSafe });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    if (req && req.log) req.log.error({ err }, 'loginUser failed');
+    else logger.error({ err }, 'loginUser failed');
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 // GET USER BY ID (admin or user himself)
@@ -137,8 +136,8 @@ exports.getUserById = async (req, res) => {
     const { id } = req.params;
 
     // Only admin or user himself
-    if (req.user.role !== "admin" && req.user.id != id) {
-      return res.status(403).json({ message: "Forbidden" });
+    if (req.user.role !== 'admin' && req.user.id != id) {
+      return res.status(403).json({ message: 'Forbidden' });
     }
 
     const user = await prisma.user.findUnique({
@@ -155,7 +154,7 @@ exports.getUserById = async (req, res) => {
       },
     });
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const userSafe = {
@@ -182,8 +181,9 @@ exports.getUserById = async (req, res) => {
 
     res.json(userSafe);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    if (req && req.log) req.log.error({ err }, 'getUserById failed');
+    else logger.error({ err }, 'getUserById failed');
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -200,7 +200,7 @@ exports.getAllUsers = async (req, res) => {
     const users = await prisma.user.findMany({
       skip: offset,
       take: limit,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         fullName: true,
@@ -222,8 +222,9 @@ exports.getAllUsers = async (req, res) => {
       users,
     });
   } catch (error) {
-    console.error("Get all users error:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    if (req && req.log) req.log.error({ error }, 'getAllUsers failed');
+    else logger.error({ error }, 'getAllUsers failed');
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
 // BLOCK USER (admin or user himself)
@@ -231,13 +232,13 @@ exports.blockUser = async (req, res) => {
   try {
     const { id } = req.params; // id is coerced to number by validateParams
 
-    if (req.user.role !== "admin" && req.user.id != id) {
-      return res.status(403).json({ message: "Forbidden" });
+    if (req.user.role !== 'admin' && req.user.id != id) {
+      return res.status(403).json({ message: 'Forbidden' });
     }
 
     const user = await prisma.user.update({
       where: { id },
-      data: { status: "inactive" },
+      data: { status: 'inactive' },
       select: {
         id: true,
         fullName: true,
@@ -247,13 +248,14 @@ exports.blockUser = async (req, res) => {
       },
     });
 
-    res.json({ message: "User blocked successfully", user });
+    res.json({ message: 'User blocked successfully', user });
   } catch (err) {
     // handle record-not-found error from Prisma
-    if (err && err.code === "P2025") {
-      return res.status(404).json({ message: "User not found" });
+    if (err && err.code === 'P2025') {
+      return res.status(404).json({ message: 'User not found' });
     }
-    console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    if (req && req.log) req.log.error({ err }, 'blockUser failed');
+    else logger.error({ err }, 'blockUser failed');
+    res.status(500).json({ message: 'Internal server error' });
   }
 };

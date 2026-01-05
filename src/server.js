@@ -1,11 +1,12 @@
 const app = require('./app');
 const prisma = require('./lib/prisma');
+const { logger } = require('./lib/logger');
 
 const PORT = process.env.PORT || 3000;
 const SHUTDOWN_TIMEOUT = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 10000;
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info({ port: PORT }, 'Server running');
 });
 
 // Track open connections so we can destroy them on forced shutdown
@@ -20,7 +21,7 @@ let isShuttingDown = false;
 async function gracefulShutdown(reason) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log(`Graceful shutdown initiated: ${reason}`);
+  logger.info({ reason }, 'Graceful shutdown initiated');
 
   // Stop accepting new connections
   try {
@@ -30,19 +31,19 @@ async function gracefulShutdown(reason) {
         resolve();
       });
     });
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
   } catch (err) {
-    console.error('Error closing HTTP server:', err);
+    logger.error({ err }, 'Error closing HTTP server');
   }
 
   // Give existing connections some time, then forcefully destroy them
   const forceTimeout = setTimeout(() => {
-    console.warn('Forcing open connections to close');
+    logger.warn('Forcing open connections to close');
     connections.forEach((socket) => {
       try {
         socket.destroy();
       } catch (e) {
-        console.error('Error destroying socket:', e);
+        logger.error({ e }, 'Error destroying socket');
       }
     });
   }, SHUTDOWN_TIMEOUT);
@@ -50,13 +51,14 @@ async function gracefulShutdown(reason) {
   // Disconnect Prisma
   try {
     await prisma.$disconnect();
-    console.log('Prisma disconnected');
+    logger.info('Prisma disconnected');
   } catch (err) {
-    console.error('Error disconnecting Prisma:', err);
+    logger.error({ err }, 'Error disconnecting Prisma');
   }
 
   clearTimeout(forceTimeout);
-  console.log('Shutdown complete. Exiting process.');
+  logger.info('Shutdown complete. Exiting process.');
+  // eslint-disable-next-line no-process-exit
   process.exit(0);
 }
 
@@ -64,11 +66,11 @@ async function gracefulShutdown(reason) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection at:', reason);
+  logger.error({ reason }, 'Unhandled Rejection');
   gracefulShutdown('unhandledRejection');
 });
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.error({ err }, 'Uncaught Exception');
   gracefulShutdown('uncaughtException');
 });
 

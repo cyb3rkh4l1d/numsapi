@@ -49,4 +49,38 @@ describe('Block user route', () => {
     expect(res.status).toBe(200);
     expect(res.body.user.status).toBe('inactive');
   });
+
+  test('user can block themselves', async () => {
+    prisma.user.update.mockResolvedValue({
+      id: 5,
+      fullName: 'Self User',
+      email: 'self@example.com',
+      role: 'user',
+      status: 'inactive',
+    });
+    const userToken = jwt.sign(
+      { id: 5, email: 'self@example.com', role: 'user' },
+      process.env.JWT_SECRET || 'testsecret',
+    );
+
+    const res = await request(app)
+      .put('/api/users/block/5')
+      .set('Authorization', `Bearer ${userToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.status).toBe('inactive');
+  });
+
+  test('user cannot block another user', async () => {
+    const userToken = jwt.sign(
+      { id: 6, email: 'user6@example.com', role: 'user' },
+      process.env.JWT_SECRET || 'testsecret',
+    );
+
+    const res = await request(app)
+      .put('/api/users/block/7')
+      .set('Authorization', `Bearer ${userToken}`);
+
+    expect(res.status).toBe(403);
+  });
 });
