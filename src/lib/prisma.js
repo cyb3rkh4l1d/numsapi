@@ -1,6 +1,6 @@
-require("dotenv").config();
-const { PrismaClient } = require("@prisma/client");
-const { PrismaMariaDb } = require("@prisma/adapter-mariadb");
+require('dotenv').config();
+const { PrismaClient } = require('@prisma/client');
+const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 
 // Single shared Prisma client across the app
 const prisma = new PrismaClient({
@@ -8,5 +8,3 @@ const prisma = new PrismaClient({
 });
 
 module.exports = prisma;
-
-// When running tests, jest.mock('../src/lib/prisma') will replace this module with mocked functions.

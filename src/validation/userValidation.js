@@ -1,32 +1,65 @@
-const { z } = require("zod");
+const { z } = require('zod');
 
-// Registration validation
+/* =======================
+   SCHEMAS
+======================= */
+
+// Registration
 const registerSchema = z.object({
-  fullName: z.string().min(2, "Full name must be at least 2 characters"),
-  dob: z
-    .string()
-    .refine(
-      (val) => !isNaN(Date.parse(val)),
-      "Date of Birth must be a valid date"
-    ),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  fullName: z.string().min(2, 'Full name must be at least 2 characters'),
+  dob: z.string().refine((val) => !isNaN(Date.parse(val)), 'Date of Birth must be a valid date'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-// Login validation
+// Login
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-const blockUserParamsSchema = z.object({
+// URL param (user id)
+const userIdParamSchema = z.object({
   id: z
     .string()
-    .regex(/^[0-9]+$/, "Invalid user id")
-    .transform((s) => parseInt(s, 10))
-    .refine((n) => Number.isInteger(n) && n > 0, {
-      message: "Invalid user id",
-    }),
+    .regex(/^\d+$/, 'Invalid user id')
+    .transform(Number)
+    .refine((n) => n > 0, 'Invalid user id'),
 });
 
-module.exports = { registerSchema, loginSchema, blockUserParamsSchema };
+/* =======================
+   GENERIC VALIDATOR
+======================= */
+
+const validate = (schema, property = 'body') => {
+  return (req, res, next) => {
+    const result = schema.safeParse(req[property]);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        errors: result.error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+        })),
+      });
+    }
+
+    // Replace with validated + sanitized data
+    req[property] = result.data;
+    next();
+  };
+};
+
+// Convenience wrappers for body and params
+const validateBody = (schema) => validate(schema, 'body');
+const validateParams = (schema) => validate(schema, 'params');
+
+module.exports = {
+  registerSchema,
+  loginSchema,
+  userIdParamSchema,
+  validate,
+  validateBody,
+  validateParams,
+};

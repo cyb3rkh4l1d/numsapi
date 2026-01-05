@@ -1,29 +1,35 @@
 // src/routes/userRoutes.js
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, getAllUsers, getUserById, blockUser } = require("../controllers/userController");
-const { authenticate, adminMiddleware } = require("../middlewares/auth");
-const validateParams = require("../middlewares/validateParams");
-const validateBody = require("../middlewares/validateBody");
 const {
-  blockUserParamsSchema,
+  registerUser,
+  loginUser,
+  getAllUsers,
+  getUserById,
+  blockUser,
+} = require('../controllers/userController');
+const { authenticate, adminMiddleware } = require('../middlewares/auth');
+const {
+  validateParams,
+  validateBody,
+  userIdParamSchema,
   registerSchema,
   loginSchema,
-} = require("../validation/userValidation");
+} = require('../validation/userValidation');
 
 // Public routes
-router.post("/register", validateBody(registerSchema), registerUser);
-router.post("/login", validateBody(loginSchema), loginUser);
+router.post('/register', validateBody(registerSchema), registerUser);
+router.post('/login', validateBody(loginSchema), loginUser);
 
 // Protected routes
-router.get("/all", authenticate, adminMiddleware, getAllUsers);
-router.get("/:id", authenticate, validateParams(blockUserParamsSchema), getUserById);
+router.get('/all', authenticate, adminMiddleware, getAllUsers);
+router.get('/:id', authenticate, validateParams(userIdParamSchema), getUserById);
 router.put(
-  "/block/:id",
+  '/block/:id',
   authenticate,
   adminMiddleware,
-  validateParams(blockUserParamsSchema),
-  blockUser
+  validateParams(userIdParamSchema),
+  blockUser,
 );
 
 module.exports = router;
